@@ -1,18 +1,23 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\BucketController;
+use App\Http\Controllers\BallController;
 
 /*
 |--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "web" middleware group. Make something great!
+| These routes are loaded by the RouteServiceProvider and assigned to the "web" middleware group.
+| Make something great!
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// Define resource routes for Balls, automatically generating CRUD routes for BallController
+Route::resource('balls', BallController::class);
+
+// Define resource routes for Buckets, automatically generating CRUD routes for BucketController
+Route::resource('buckets', BucketController::class);
+
+// Define a custom POST route for suggesting bucket allocations
+Route::post('buckets/suggest', [BucketController::class, 'suggest'])->name('buckets.suggest');
