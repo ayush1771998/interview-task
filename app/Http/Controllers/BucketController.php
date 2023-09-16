@@ -68,65 +68,65 @@ class BucketController extends Controller
      * @return \Illuminate\View\View
      */
     public function suggest(Request $request)
-{
-    // Validate the incoming request data
-    $request->validate([
-        'quantities' => 'required|array',
-        'quantities.*' => 'integer', // Each quantity should be an integer
-    ]);
+    {
+        // Validate the incoming request data
+        $request->validate([
+            'quantities' => 'required|array',
+            'quantities.*' => 'integer', // Each quantity should be an integer
+        ]);
 
-    $quantities = $request->input('quantities');
-    $buckets = Bucket::all();
-    $suggestions = [];
+        $quantities = $request->input('quantities');
+        $buckets = Bucket::all();
+        $suggestions = [];
 
-    if ($quantities !== null) {
-        $remainingCapacityPerBucket = [];
+        if ($quantities !== null) {
+            $remainingCapacityPerBucket = [];
 
-        // Initialize remaining capacity for each bucket
-        foreach ($buckets as $bucket) {
-            $remainingCapacityPerBucket[$bucket->id] = $bucket->capacity - $bucket->filled_value;
-        }
-
-        foreach ($quantities as $ballId => $quantity) {
-            $ball = Ball::find($ballId);
-
-            if (!$ball) {
-                continue; // Skip if the ball is not found
+            // Initialize remaining capacity for each bucket
+            foreach ($buckets as $bucket) {
+                $remainingCapacityPerBucket[$bucket->id] = $bucket->capacity - $bucket->filled_value;
             }
 
-            $requiredCapacityPerBall = $ball->size * $quantity;
+            foreach ($quantities as $ballId => $quantity) {
+                $ball = Ball::find($ballId);
 
-            // Distribute the required capacity for this ball type among buckets
+                if (!$ball) {
+                    continue; // Skip if the ball is not found
+                }
+
+                $requiredCapacityPerBall = $ball->size * $quantity;
+
+                // Distribute the required capacity for this ball type among buckets
+                foreach ($buckets as $bucket) {
+                    $remainingCapacity = $remainingCapacityPerBucket[$bucket->id];
+
+                    if ($requiredCapacityPerBall > 0 && $remainingCapacity > 0) {
+                        $usedCapacity = min($remainingCapacity, $requiredCapacityPerBall);
+                        $remainingCapacityPerBucket[$bucket->id] -= $usedCapacity;
+                        $requiredCapacityPerBall -= $usedCapacity;
+
+                        // Update the filled value for the bucket
+                        $bucket->filled_value += $usedCapacity;
+                        $bucket->save();
+                    }
+                }
+            }
+
+            // Calculate remaining space in each bucket
             foreach ($buckets as $bucket) {
-                $remainingCapacity = $remainingCapacityPerBucket[$bucket->id];
+                $remainingSpace = $remainingCapacityPerBucket[$bucket->id];
 
-                if ($requiredCapacityPerBall > 0 && $remainingCapacity > 0) {
-                    $usedCapacity = min($remainingCapacity, $requiredCapacityPerBall);
-                    $remainingCapacityPerBucket[$bucket->id] -= $usedCapacity;
-                    $requiredCapacityPerBall -= $usedCapacity;
-
-                    // Update the filled value for the bucket
-                    $bucket->filled_value += $usedCapacity;
-                    $bucket->save();
+                if ($remainingSpace > 0) {
+                    $suggestions[] = [
+                        'bucket_name' => $bucket->name,
+                        'remaining_space' => $remainingSpace,
+                    ];
                 }
             }
         }
 
-        // Calculate remaining space in each bucket
-        foreach ($buckets as $bucket) {
-            $remainingSpace = $remainingCapacityPerBucket[$bucket->id];
-
-            if ($remainingSpace > 0) {
-                $suggestions[] = [
-                    'bucket_name' => $bucket->name,
-                    'remaining_space' => $remainingSpace,
-                ];
-            }
-        }
+        // Load the 'buckets.suggest' view with suggestions data
+        return view('buckets.suggest', compact('suggestions'));
     }
-
-    // Load the 'buckets.suggest' view with suggestions data
-    return view('buckets.suggest', compact('suggestions'));
-}
 
 }
