@@ -82,7 +82,9 @@ class BucketController extends Controller
         if ($quantities !== null) {
             // Initialize remaining capacity for each bucket
             $remainingCapacityPerBucket = [];
+
             foreach ($buckets as $bucket) {
+                // Calculate remaining capacity as the difference between bucket capacity and filled value
                 $remainingCapacityPerBucket[$bucket->id] = $bucket->capacity - $bucket->filled_value;
             }
 
@@ -94,11 +96,11 @@ class BucketController extends Controller
                 }
 
                 $requiredCapacityPerBall = $ball->size * $quantity;
+                $allocated = false;
 
-                // Try to find a bucket with matching or greater capacity
+                // First, check if there is a bucket with exactly the required capacity
                 foreach ($buckets as $bucket) {
-                    if ($requiredCapacityPerBall <= $remainingCapacityPerBucket[$bucket->id]) {
-                        // There is enough capacity in this bucket, use it
+                    if ($requiredCapacityPerBall === $remainingCapacityPerBucket[$bucket->id]) {
                         $usedCapacity = $requiredCapacityPerBall;
                         $remainingCapacityPerBucket[$bucket->id] -= $usedCapacity;
                         $requiredCapacityPerBall = 0;
@@ -107,24 +109,49 @@ class BucketController extends Controller
                         $bucket->filled_value += $usedCapacity;
                         $bucket->save();
 
-                        // Check if the bucket is already in suggestions
-                        $bucketIndex = array_search($bucket->id, array_column($suggestions, 'bucket_id'));
+                        // Create a suggestion for this bucket
+                        $suggestions[] = [
+                            'bucket_id' => $bucket->id,
+                            'bucket_name' => $bucket->name,
+                            'remaining_space' => $remainingCapacityPerBucket[$bucket->id],
+                        ];
 
-                        if ($bucketIndex === false) {
-                            // Create a suggestion for this bucket
-                            $suggestions[] = [
-                                'bucket_id' => $bucket->id,
-                                'bucket_name' => $bucket->name,
-                                'remaining_space' => $remainingCapacityPerBucket[$bucket->id],
-                            ];
+                        $allocated = true;
+                        break;
+                    }
+                }
+
+                // If no bucket with exact capacity, try to find a bucket with matching or greater capacity
+                if (!$allocated) {
+                    foreach ($buckets as $bucket) {
+                        if ($requiredCapacityPerBall <= $remainingCapacityPerBucket[$bucket->id]) {
+                            $usedCapacity = $requiredCapacityPerBall;
+                            $remainingCapacityPerBucket[$bucket->id] -= $usedCapacity;
+                            $requiredCapacityPerBall = 0;
+
+                            // Update the filled value for the bucket
+                            $bucket->filled_value += $usedCapacity;
+                            $bucket->save();
+
+                            $bucketIndex = array_search($bucket->id, array_column($suggestions, 'bucket_id'));
+
+                            if ($bucketIndex === false) {
+                                // Create a suggestion for this bucket if not already suggested
+                                $suggestions[] = [
+                                    'bucket_id' => $bucket->id,
+                                    'bucket_name' => $bucket->name,
+                                    'remaining_space' => $remainingCapacityPerBucket[$bucket->id],
+                                ];
+                            }
+
+                            $allocated = true;
+                            break;
                         }
-
-                        break; // Exit the loop since we've found a suitable bucket
                     }
                 }
 
                 // If no bucket can accommodate the entire ball's capacity, report it
-                if ($requiredCapacityPerBall > 0) {
+                if (!$allocated) {
                     $suggestions[] = [
                         'bucket_id' => null,
                         'bucket_name' => 'No bucket can accommodate',
@@ -142,6 +169,7 @@ class BucketController extends Controller
                 $bucketIndex = array_search($bucket->id, array_column($suggestions, 'bucket_id'));
 
                 if ($bucketIndex === false) {
+                    // Create a suggestion for this bucket if not already suggested
                     $suggestions[] = [
                         'bucket_id' => $bucket->id,
                         'bucket_name' => $bucket->name,
